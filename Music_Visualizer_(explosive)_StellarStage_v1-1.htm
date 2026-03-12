@@ -155,9 +155,9 @@
 <input type="file" id="imgInput-3" accept="image/*" style="display:none">
 
 <div id="ui-panel">
-    <h3 id="manifest-title" style="margin:0; color:#8A2BE2; border-bottom:1px solid #8A2BE2;">V50-E MANIFEST</h3>
+    <h3 id="manifest-title" style="margin:0; color:#8A2BE2; border-bottom:1px solid #8A2BE2;">VISUALIZER CONTROLS</h3>
     <div style="color:#8A2BE2; font-size:9px; margin:5px 0 4px; line-height:1.7;">
-        <b>P</b> toggle UI &nbsp;|&nbsp; <b>0</b> repeat &nbsp;|&nbsp; <b>7</b> reframe &nbsp;|&nbsp; Orbit <b>[8] slower | faster [9]</b> &nbsp;|&nbsp; <b>F</b> fullscreen &nbsp;|&nbsp; <b>↑↓</b> emoji % &nbsp;|&nbsp; <b>T</b> tornado &nbsp;|&nbsp; <b>E</b> explode
+        <b>P</b> - Toggle Hide &nbsp;|&nbsp; <b>0</b> - Repeat &nbsp;|&nbsp; <b>7</b> - Zoom and Frame &nbsp;|&nbsp; <b>8 &lt;-</b> Orbit <b>-&gt; 9</b> &nbsp;|&nbsp; <b>F</b> - Fullscreen &nbsp;|&nbsp; <b>↑↓</b> More/Less Emoji % &nbsp;|&nbsp; <b>T</b> - Tornado &nbsp;|&nbsp; <b>E</b> - Explode
     </div>
 
     <!-- CYAN RING -->
@@ -1223,11 +1223,11 @@ function animate(timestamp) {
             const g = Math.floor(43  * (1 - tornadoStrength));
             title.style.color       = `rgb(${r},${g},226)`;
             title.style.borderColor = `rgb(${r},${g},226)`;
-            title.textContent = tornadoStrength > 0.5 ? '⚡ STORM ACTIVE ⚡' : 'V50-E MANIFEST';
+            title.textContent = tornadoStrength > 0.5 ? '⚡ STORM ACTIVE ⚡' : 'VISUALIZER CONTROLS';
         } else {
             title.style.color       = '#8A2BE2';
             title.style.borderColor = '#8A2BE2';
-            title.textContent = 'V50-E MANIFEST';
+            title.textContent = 'VISUALIZER CONTROLS';
         }
     }
 
