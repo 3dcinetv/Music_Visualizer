@@ -1,0 +1,1432 @@
+<!--
+================================================================================
+  STELLAR STAGE — Music Visualizer v1.1
+================================================================================
+  Author:      Pierre Schiller, GG, Claude
+  Website:     https://3dcinetv.com
+  GitHub:      https://github.com/3dcinetv
+  YouTube:     https://youtube.com/@3dcinetv_music
+               https://youtube.com/@activemotionpictures
+
+  License:     Creative Commons CC BY-NC-ND 4.0
+               Free to use. Credit required. No derivatives. No commercial use.
+               https://creativecommons.org/licenses/by-nc-nd/4.0/
+
+  Description: A real-time 3D music visualizer built with Three.js and Web Audio
+               API. Load your MP3, optionally load up to 4 transitioning hologram
+               images, and vibe. Full compositor-grade parameter control panel.
+
+  Usage:
+    1. Open in Chrome or Firefox
+    2. Press F for fullscreen
+    3. Click START MUSIC or load your own MP3
+    4. Load up to 4 images into the hologram slots (optional)
+    5. Press 0 to replay — tune all parameters — then let it run
+    6. Press P to hide/show the UI panel for clean recording
+    7. Press 9 to toggle auto-orbit camera
+    8. Scroll the parameter panel for all controls
+
+  Bug reports: https://github.com/3dcinetv (Issues tab)
+================================================================================
+-->
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>STELLAR STAGE — Music Visualizer v1.1</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Segoe UI', sans-serif; cursor: none; }
+
+        #emoji-cursor {
+            position: fixed; pointer-events: none; z-index: 99999;
+            font-size: 28px; line-height: 1;
+            transform: translate(-50%, -50%);
+            transition: transform 0.05s ease;
+            user-select: none;
+        }
+
+        #start {
+            position: absolute; top: 20px; left: 20px;
+            padding: 15px 30px; font-size: 18px; font-weight: bold;
+            background: #00ffff; border: none; cursor: pointer;
+            box-shadow: 0 0 30px #00ffff; z-index: 1000; border-radius: 4px;
+            color: #000; text-transform: uppercase;
+        }
+
+        #mp3FileInput { display: none; }
+        #left-buttons {
+            position: absolute; top: 75px; left: 20px;
+            z-index: 1000; transition: opacity 0.3s;
+        }
+
+        /* Image slot buttons */
+        .img-slot-row { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+        .slot-btn {
+            flex: 1; padding: 7px 10px; font-size: 11px; font-weight: bold;
+            background: rgba(138,43,226,0.6); border: 1px solid #8A2BE2;
+            cursor: pointer; border-radius: 4px; color: #fff;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            box-shadow: 0 0 10px rgba(138,43,226,0.4);
+            transition: background 0.2s;
+        }
+        .slot-btn:hover  { background: rgba(138,43,226,0.95); }
+        .slot-btn.loaded { background: rgba(0,200,100,0.6); border-color: #00cc66; box-shadow: 0 0 10px rgba(0,200,100,0.4); }
+        .slot-indicator  { width: 8px; height: 8px; border-radius: 50%; background: #333; border: 1px solid #555; flex-shrink: 0; }
+        .slot-indicator.active { background: #00ffff; box-shadow: 0 0 6px #00ffff; }
+        .slot-indicator.loaded-dot { background: #00cc66; }
+
+        #loadMp3Btn {
+            display: block; margin-top: 4px;
+            padding: 8px 14px; font-size: 12px; font-weight: bold;
+            background: rgba(0,180,100,0.75); border: 1px solid #00cc66;
+            cursor: pointer; border-radius: 4px; color: #fff;
+            text-transform: uppercase; letter-spacing: 1px;
+            box-shadow: 0 0 12px rgba(0,200,100,0.4); width: 100%;
+        }
+        #loadMp3Btn:hover { background: rgba(0,200,100,0.95); }
+
+        #ui-panel {
+            position: absolute; top: 20px; right: 20px;
+            width: 325px; padding: 15px; background: rgba(0,0,0,0.95);
+            border: 1px solid #8A2BE2; color: #00ffff; z-index: 100;
+            border-radius: 8px; font-size: 10px; max-height: 90vh; overflow-y: auto;
+            transition: opacity 0.3s; scrollbar-width: thin;
+        }
+        .slider-group { margin-bottom: 8px; border-bottom: 1px solid rgba(138,43,226,0.3); padding-bottom: 4px; }
+        label { display: block; margin-bottom: 2px; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; }
+        input[type=range] { width: 100%; accent-color: #8A2BE2; cursor: pointer; }
+        .val { float: right; color: #fff; }
+        .freq-badge {
+            font-size: 8px; float: right; margin-top: -14px;
+            padding: 1px 5px; border-radius: 3px; letter-spacing: 0.5px;
+        }
+        .treble-badge { background: rgba(255,170,0,0.25);  color: #ffaa00; border: 1px solid #ffaa00; }
+        .bass-badge   { background: rgba(0,102,255,0.25);  color: #4499ff; border: 1px solid #4499ff; }
+        .cyan-badge   { background: rgba(0,255,255,0.15);  color: #00ffff; border: 1px solid #00ffff; }
+        .holo-badge   { background: rgba(138,43,226,0.25); color: #cc88ff; border: 1px solid #cc88ff; }
+        .swap-badge   { background: rgba(255,50,150,0.2);  color: #ff66bb; border: 1px solid #ff44aa; }
+        .section-label { font-size: 9px; margin: 10px 0 4px; letter-spacing: 1px; }
+        .emoji-select {
+            width: 100%; background: rgba(138,43,226,0.35); border: 1px solid #8A2BE2;
+            color: #fff; padding: 5px 8px; border-radius: 4px; cursor: pointer;
+            font-size: 12px; margin-top: 2px; margin-bottom: 2px;
+            appearance: none; -webkit-appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238A2BE2'/%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 8px center;
+        }
+        .emoji-select:hover { background-color: rgba(138,43,226,0.6); }
+        .emoji-select option { background: #111; color: #fff; }
+    </style>
+</head>
+<body>
+<div id="emoji-cursor">😊</div>
+<script>
+    (function() {
+        const cur = document.getElementById('emoji-cursor');
+        document.addEventListener('mousemove', e => {
+            cur.style.opacity = '1';
+            cur.style.left = e.clientX + 'px';
+            cur.style.top  = e.clientY + 'px';
+        });
+        // Hide when mouse leaves the browser window
+        document.addEventListener('mouseleave', () => cur.style.opacity = '0');
+        document.addEventListener('mouseenter', () => cur.style.opacity = '1');
+        // Squeeze on drag
+        document.addEventListener('mousedown', () => cur.style.transform = 'translate(-50%,-50%) scale(0.7)');
+        document.addEventListener('mouseup',   () => cur.style.transform = 'translate(-50%,-50%) scale(1.0)');
+    })();
+</script>
+
+<button id="start">START MUSIC 🔥</button>
+<input type="file" id="mp3FileInput" accept=".mp3,audio/*">
+
+<!-- LEFT SIDE: image slots + MP3 loader -->
+<div id="left-buttons">
+    <div class="img-slot-row"><div class="slot-indicator" id="dot-0"></div><button class="slot-btn" id="slot-0">📷 IMG SLOT 1</button></div>
+    <div class="img-slot-row"><div class="slot-indicator" id="dot-1"></div><button class="slot-btn" id="slot-1">📷 IMG SLOT 2</button></div>
+    <div class="img-slot-row"><div class="slot-indicator" id="dot-2"></div><button class="slot-btn" id="slot-2">📷 IMG SLOT 3</button></div>
+    <div class="img-slot-row"><div class="slot-indicator" id="dot-3"></div><button class="slot-btn" id="slot-3">📷 IMG SLOT 4</button></div>
+    <button id="loadMp3Btn">🎵 LOAD LOCAL MP3</button>
+</div>
+<!-- Hidden file inputs per slot -->
+<input type="file" id="imgInput-0" accept="image/*" style="display:none">
+<input type="file" id="imgInput-1" accept="image/*" style="display:none">
+<input type="file" id="imgInput-2" accept="image/*" style="display:none">
+<input type="file" id="imgInput-3" accept="image/*" style="display:none">
+
+<div id="ui-panel">
+    <h3 id="manifest-title" style="margin:0; color:#8A2BE2; border-bottom:1px solid #8A2BE2;">V50-E MANIFEST</h3>
+    <div style="color:#8A2BE2; font-size:9px; margin:5px 0 4px; line-height:1.7;">
+        <b>P</b> toggle UI &nbsp;|&nbsp; <b>0</b> repeat &nbsp;|&nbsp; <b>7</b> reframe &nbsp;|&nbsp; Orbit <b>[8] slower | faster [9]</b> &nbsp;|&nbsp; <b>F</b> fullscreen &nbsp;|&nbsp; <b>↑↓</b> emoji % &nbsp;|&nbsp; <b>T</b> tornado &nbsp;|&nbsp; <b>E</b> explode
+    </div>
+
+    <!-- CYAN RING -->
+    <div class="section-label" style="color:#00ffff;">── CYAN RING (11kHz–22kHz) ──</div>
+    <div class="slider-group">
+        <label>RING RADIUS <span class="val" id="val-hRad">1.3</span></label>
+        <input type="range" id="input-hRad" min="1.0" max="10.0" step="0.1" value="1.3">
+        <span class="freq-badge cyan-badge">11k–22kHz</span>
+    </div>
+    <div class="slider-group">
+        <label>RING SENSITIVITY <span class="val" id="val-hSens">5.1</span></label>
+        <input type="range" id="input-hSens" min="0.1" max="10.0" step="0.1" value="5.1">
+    </div>
+
+    <!-- ORANGE TREBLE -->
+    <div class="section-label" style="color:#ffaa00;">── ORANGE BARS (4kHz–12kHz TREBLE) ──</div>
+    <div class="slider-group">
+        <label>ORANGE RADIUS <span class="val" id="val-oScale">3.9</span></label>
+        <input type="range" id="input-oScale" min="2.0" max="12.0" step="0.1" value="3.9">
+        <span class="freq-badge treble-badge">4k–12kHz LOG</span>
+    </div>
+    <div class="slider-group">
+        <label>ORANGE EQ SENS <span class="val" id="val-oSens">1.0</span></label>
+        <input type="range" id="input-oSens" min="0.1" max="10.0" step="0.1" value="1.0">
+    </div>
+    <div class="slider-group">
+        <label>ORANGE MAX HEIGHT <span class="val" id="val-oMax">5.6</span></label>
+        <input type="range" id="input-oMax" min="0.5" max="15.0" step="0.1" value="5.6">
+    </div>
+
+    <!-- BLUE BASS -->
+    <div class="section-label" style="color:#4499ff;">── BLUE BARS (20Hz–300Hz BASS) ──</div>
+    <div class="slider-group">
+        <label>BLUE RADIUS <span class="val" id="val-bScale">6.2</span></label>
+        <input type="range" id="input-bScale" min="4.0" max="15.0" step="0.1" value="6.2">
+        <span class="freq-badge bass-badge">20–300Hz</span>
+    </div>
+    <div class="slider-group">
+        <label>BLUE EQ SENS <span class="val" id="val-bSens">0.4</span></label>
+        <input type="range" id="input-bSens" min="0.1" max="15.0" step="0.1" value="0.4">
+    </div>
+    <div class="slider-group">
+        <label>BLUE MAX HEIGHT <span class="val" id="val-bMax">8.2</span></label>
+        <input type="range" id="input-bMax" min="0.5" max="15.0" step="0.1" value="8.2">
+    </div>
+
+    <!-- PARTICLES -->
+    <div class="section-label" style="color:#8A2BE2;">── PARTICLES ──</div>
+    <div class="slider-group">
+        <label>EMOJI SET</label>
+        <select class="emoji-select" id="emojiPreset">
+            <option value="pop">🎉  POP / EDM</option>
+            <option value="rock">🤘  ROCK</option>
+            <option value="dark">💀  DARK / SPOOKY</option>
+            <option value="chill">🌙  CHILL / LOFI</option>
+            <option value="hype">💰  HYPE / TRAP</option>
+        </select>
+    </div>
+    <div class="slider-group"><label>CENTER PARTICLE % <span class="val" id="val-cDens">50</span></label><input type="range" id="input-cDens" min="0" max="100" step="1" value="50"></div>
+    <div class="slider-group"><label>SPAWN THRESHOLD <span class="val" id="val-pSens">200</span></label><input type="range" id="input-pSens" min="100" max="250" step="1" value="200"></div>
+    <div class="slider-group"><label>EMOJI PROB % <span class="val" id="val-eProb">30</span></label><input type="range" id="input-eProb" min="0" max="100" step="1" value="30"></div>
+    <div class="slider-group"><label>PARTICLE BASE SIZE <span class="val" id="val-pSize">0.32</span></label><input type="range" id="input-pSize" min="0.05" max="2.0" step="0.01" value="0.32"></div>
+    <div class="slider-group"><label>SIZE RANDOMIZE <span class="val" id="val-pRand">0.0</span></label><input type="range" id="input-pRand" min="0.0" max="1.0" step="0.01" value="0.0"><span class="freq-badge" style="background:rgba(138,43,226,0.25);color:#cc88ff;border:1px solid #cc88ff;font-size:8px;float:right;margin-top:-14px;padding:1px 5px;border-radius:3px;">0=uniform | 1=chaos</span></div>
+    <div class="slider-group"><label>DRIFT VELOCITY <span class="val" id="val-aSpeed">1.0</span></label><input type="range" id="input-aSpeed" min="0.1" max="5.0" step="0.1" value="1.0"></div>
+    <div class="slider-group"><label>DRIFT JITTER <span class="val" id="val-jitter">1.0</span></label><input type="range" id="input-jitter" min="0.0" max="5.0" step="0.1" value="1.0"></div>
+    <div class="slider-group"><label>TAIL DELAY <span class="val" id="val-tDelay">1.0</span></label><input type="range" id="input-tDelay" min="0.0" max="3.0" step="0.1" value="1.0"></div>
+    <div class="slider-group"><label>TAIL FADE SPEED <span class="val" id="val-tSpeed">2.0</span></label><input type="range" id="input-tSpeed" min="0.5" max="5.0" step="0.1" value="2.0"></div>
+    <div class="slider-group"><label>ALTITUDE THRESHOLD <span class="val" id="val-aThresh">12.0</span></label><input type="range" id="input-aThresh" min="5.0" max="25.0" step="0.5" value="12.0"></div>
+    <div class="slider-group"><label>TAIL SECTIONS <span class="val" id="val-tLen">6</span></label><input type="range" id="input-tLen" min="1" max="20" step="1" value="6"></div>
+
+    <!-- AUTO ORBIT -->
+    <div class="section-label" style="color:#00ff88;">── AUTO ORBIT ──</div>
+    <div class="slider-group">
+        <label>ORBIT SPEED <span class="val" id="val-orbitSpeed">0.0</span></label>
+        <input type="range" id="input-orbitSpeed" min="-3.0" max="3.0" step="0.05" value="0.0">
+    </div>
+
+    <!-- HOLOGRAM -->
+    <div class="section-label" style="color:#cc88ff;">── HOLOGRAM IMAGE ──</div>
+    <div class="slider-group">
+        <label>IMAGE SCALE <span class="val" id="val-imgScale">4.0</span></label>
+        <input type="range" id="input-imgScale" min="0.5" max="12.0" step="0.1" value="4.0">
+    </div>
+    <div class="slider-group">
+        <label>IMAGE HEIGHT <span class="val" id="val-imgY">2.0</span></label>
+        <input type="range" id="input-imgY" min="0.0" max="10.0" step="0.1" value="2.0">
+    </div>
+    <div class="slider-group">
+        <label>VERTICAL TILT <span class="val" id="val-tiltAmt">0.3</span></label>
+        <input type="range" id="input-tiltAmt" min="0.0" max="1.0" step="0.01" value="0.3">
+        <span class="freq-badge holo-badge">0=locked | 1=full</span>
+    </div>
+    <div class="slider-group">
+        <label>TILE COUNT <span class="val" id="val-tileCount">8</span></label>
+        <input type="range" id="input-tileCount" min="2" max="32" step="1" value="8">
+    </div>
+    <div class="slider-group">
+        <label>GLITCH SPEED <span class="val" id="val-glitchSpd">8.0</span></label>
+        <input type="range" id="input-glitchSpd" min="1.0" max="30.0" step="0.5" value="8.0">
+    </div>
+    <div class="slider-group">
+        <label>RGB OFFSET SENS <span class="val" id="val-rgbSens">3.0</span></label>
+        <input type="range" id="input-rgbSens" min="0.0" max="10.0" step="0.1" value="3.0">
+        <span class="freq-badge holo-badge">12kHz+</span>
+    </div>
+    <div class="slider-group">
+        <label>RGB MAX OFFSET <span class="val" id="val-rgbMax">0.04</span></label>
+        <input type="range" id="input-rgbMax" min="0.0" max="0.12" step="0.002" value="0.04">
+    </div>
+    <div class="slider-group">
+        <label>IMAGE GLOW <span class="val" id="val-imgGlow">0.5</span></label>
+        <input type="range" id="input-imgGlow" min="0.05" max="2.0" step="0.05" value="0.5">
+        <span class="freq-badge holo-badge">0.05=photo | 2.0=bulb</span>
+    </div>
+
+    <!-- IMAGE SWAP -->
+    <div class="section-label" style="color:#ff66bb;">── IMAGE SWAP ──</div>
+    <div class="slider-group">
+        <label>SWAP SENSITIVITY <span class="val" id="val-swapSens">2.5</span></label>
+        <input type="range" id="input-swapSens" min="0.5" max="8.0" step="0.1" value="2.5">
+        <span class="freq-badge swap-badge">energy peak</span>
+    </div>
+    <div class="slider-group">
+        <label>SWAP COOLDOWN s <span class="val" id="val-swapCool">12</span></label>
+        <input type="range" id="input-swapCool" min="4" max="60" step="1" value="12">
+    </div>
+    <div class="slider-group">
+        <label>TRANSITION SPEED <span class="val" id="val-transSpd">1.2</span></label>
+        <input type="range" id="input-transSpd" min="0.3" max="3.0" step="0.1" value="1.2">
+    </div>
+    <div class="slider-group">
+        <label>GLITCH ROW COUNT <span class="val" id="val-glitchRows">40</span></label>
+        <input type="range" id="input-glitchRows" min="8" max="120" step="1" value="40">
+        <span class="freq-badge swap-badge">strip height</span>
+    </div>
+    <div class="slider-group">
+        <label>SMEAR AMOUNT <span class="val" id="val-smearAmt">0.5</span></label>
+        <input type="range" id="input-smearAmt" min="0.05" max="1.5" step="0.05" value="0.5">
+    </div>
+    <div class="slider-group">
+        <label>JUMP HEIGHT <span class="val" id="val-jumpAmt">0.12</span></label>
+        <input type="range" id="input-jumpAmt" min="0.01" max="0.4" step="0.01" value="0.12">
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  RENDERER / SCENE
+// ═══════════════════════════════════════════════════════════════
+const scene  = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 1000);
+camera.position.set(15, 12, 15);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ReinhardToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const composer = new THREE.EffectComposer(renderer);
+composer.addPass(new THREE.RenderPass(scene, camera));
+const bloom = new THREE.UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight), 1.8, 0.4, 0.1
+);
+composer.addPass(bloom);
+
+// ── CHROMATIC ABERRATION PASS ─────────────────────────────────────────────
+// Offsets R channel left, B channel right in screen space
+// Intensity driven by explosion state — zero at rest, spikes on detonation
+const chromaticShader = {
+    uniforms: {
+        tDiffuse: { value: null },
+        uCAStrength: { value: 0.0 }  // 0 = off, 1 = full aberration
+    },
+    vertexShader: `
+        varying vec2 vUv;
+        void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }
+    `,
+    fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform float uCAStrength;
+        varying vec2 vUv;
+        void main() {
+            vec2 offset = vec2(uCAStrength * 0.022, 0.0);
+            float r = texture2D(tDiffuse, vUv + offset).r;
+            float g = texture2D(tDiffuse, vUv).g;
+            float b = texture2D(tDiffuse, vUv - offset).b;
+            gl_FragColor = vec4(r, g, b, 1.0);
+        }
+    `
+};
+const caPass = new THREE.ShaderPass(chromaticShader);
+composer.addPass(caPass);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+const stage    = new THREE.Group();
+scene.add(stage);
+
+// ── CAMERA FOCUS STATE (7 key) ────────────────────────────────────────────
+// Lerps camera to frame the hologram at 40% screen height — preserves current angle
+let   camFocusing     = false;
+let   camFocusT       = 0;
+const FOCUS_DUR       = 1.4;   // seconds — ease-in-out S-curve
+const _camFocusFrom   = new THREE.Vector3();
+const _camTargetFrom  = new THREE.Vector3();
+const _camFocusTo     = new THREE.Vector3(); // computed at keypress time
+const _camTargetTo    = new THREE.Vector3();
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  TORNADO STATE  (T key)
+// ═══════════════════════════════════════════════════════════════
+let tornadoStrength = 0;   // 0 = calm, 1 = full storm — lerps both ways
+let tornadoActive   = false;
+let tornadoEProbSaved = null; // eProb value before storm activated
+const TORNADO_IN    = 0.04;
+const TORNADO_OUT   = 0.015; // ramp-down — double time = smoother release
+
+// ═══════════════════════════════════════════════════════════════
+//  EXPLOSION STATE  (E key)
+// ═══════════════════════════════════════════════════════════════
+let exploding       = false;
+let explodeTime     = 0;
+let explodeBoost    = 1.0;
+let lastExplodeEnd  = -999; // timestamp of last explosion finish
+const EXPLODE_DUR   = 2.2;
+const EXPLODE_COOL  = 2.0;  // minimum seconds between detonations
+
+// Flash core — white overdrive sphere
+const flashGeo  = new THREE.SphereGeometry(0.4, 16, 16);
+const flashMat  = new THREE.MeshBasicMaterial({ color: 0xffffff });
+const flashMesh = new THREE.Mesh(flashGeo, flashMat);
+flashMesh.visible = false;
+scene.add(flashMesh);
+
+// Shockwave ring
+const shockGeo  = new THREE.TorusGeometry(1, 0.06, 8, 64);
+const shockMat  = new THREE.MeshBasicMaterial({
+    color: 0xffeedd, transparent: true, opacity: 0, depthWrite: false
+});
+const shockMesh = new THREE.Mesh(shockGeo, shockMat);
+shockMesh.rotation.x = Math.PI / 2;
+shockMesh.position.y  = 0.5;
+scene.add(shockMesh);
+
+// ── BURST PARTICLES — white→orange→fade, small quads, no tails ──────────
+// Two layers: inner fast white core + outer slower orange ember cloud
+const BURST_INNER = 80;   // fast white-hot
+const BURST_OUTER = 100;  // slower orange embers
+const burstParticles = [];
+
+function makeBurstLayer(count, speedMin, speedMax, sizeMin, sizeMax, upBias) {
+    for (let i = 0; i < count; i++) {
+        const sz  = sizeMin + Math.random() * (sizeMax - sizeMin);
+        const p   = new THREE.Mesh(
+            new THREE.PlaneGeometry(sz, sz),  // square — no elongation
+            new THREE.MeshBasicMaterial({
+                color: 0xffffff, transparent: true,
+                opacity: 0, depthWrite: false, side: THREE.DoubleSide
+            })
+        );
+        p.renderOrder = 6;
+        const theta = Math.random() * Math.PI * 2;
+        const phi   = Math.acos(2 * Math.random() - 1);
+        const dx    = Math.sin(phi) * Math.cos(theta);
+        const dy    = Math.abs(Math.cos(phi)) * upBias + (1 - upBias) * Math.random();
+        const dz    = Math.sin(phi) * Math.sin(theta);
+        p.userData  = {
+            dir:      new THREE.Vector3(dx, dy, dz).normalize(),
+            speed:    speedMin + Math.random() * (speedMax - speedMin),
+            isInner:  upBias > 0.5   // inner layer flag for color lerp
+        };
+        p.position.set(0, 0.5, 0);
+        scene.add(p);
+        burstParticles.push(p);
+    }
+}
+makeBurstLayer(BURST_INNER, 6, 14, 0.06, 0.16, 0.7);   // inner: fast, small, upward bias
+makeBurstLayer(BURST_OUTER, 2,  8, 0.08, 0.22, 0.3);   // outer: slow, larger, spherical
+
+const _burstCol = new THREE.Color();
+const BURST_WHITE  = new THREE.Color(0xffffff);
+const BURST_ORANGE = new THREE.Color(0xff6600);
+const BURST_EMBER  = new THREE.Color(0xff2200);
+
+function triggerExplosion() {
+    if (exploding) {
+        // Already mid-burst — hold E adds power, driven by the song energy
+        explodeBoost = Math.min(3.0, explodeBoost + 0.7);
+        return;
+    }
+    exploding    = true;
+    explodeTime  = 0;
+    explodeBoost = 1.0;
+    burstParticles.forEach(p => {
+        p.position.set(0, 0.5, 0);
+        p.material.opacity = 0;
+        p.material.color.copy(BURST_WHITE);
+    });
+    shockMesh.scale.set(0.1, 0.1, 0.1);
+    shockMat.opacity    = 0;
+    flashMesh.visible   = true;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  UI DATA
+// ═══════════════════════════════════════════════════════════════
+const uiData = {
+    hRad: 1.3,  hSens: 5.1,
+    imgScale: 4.0, imgY: 2.0, tiltAmt: 0.3,
+    tileCount: 8.0, glitchSpd: 8.0,
+    rgbSens: 3.0, rgbMax: 0.04, imgGlow: 0.5,
+    swapSens: 2.5, swapCool: 12, transSpd: 1.2,
+    glitchRows: 40, smearAmt: 0.5, jumpAmt: 0.12,
+    oScale: 3.9, oSens: 1.0, oMax: 5.6,
+    bScale: 6.2, bSens: 0.4, bMax: 8.2,
+    orbitSpeed: 0.0,
+    cDens: 0.5, pSens: 200, eProb: 0.3,
+    pSize: 0.32, pRand: 0.0,
+    aSpeed: 1.0, jitter: 1.0,
+    tDelay: 1.0, tSpeed: 2.0, aThresh: 12.0, tLen: 6,
+    visible: true
+};
+
+window.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 'p') {
+        uiData.visible = !uiData.visible;
+        const vis = uiData.visible ? '1' : '0';
+        document.getElementById('ui-panel').style.opacity     = vis;
+        document.getElementById('left-buttons').style.opacity = vis;
+    }
+    if (e.code === 'KeyF') {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen();
+        } else {
+            document.exitFullscreen();
+        }
+    }
+    if (e.code === 'Digit0' && globalAudio) {
+        globalAudio.currentTime = 0;
+        globalAudio.play();
+        lastSwapTime = 0; // reset swap timer on replay
+    }
+    // 7 — reframe camera to frame hologram at 40% screen (preserves orbit angle)
+    if (e.code === 'Digit7') {
+        // Hologram world position
+        const holoPos = new THREE.Vector3(0, uiData.imgY, 0);
+        // Direction from hologram TO current camera — preserve this angle
+        const dir = camera.position.clone().sub(holoPos).normalize();
+        // Ideal distance: imgScale fills 40% of screen height
+        // screenH = 2 × d × tan(FOV/2), want imgScale = 0.40 × screenH
+        // → d = imgScale / (0.80 × tan(FOV_rad/2))
+        const fovRad     = camera.fov * Math.PI / 180;
+        const idealDist  = uiData.imgScale / (1.60 * Math.tan(fovRad / 2));
+        // Destination = hologram + direction × idealDist
+        _camFocusTo.copy(holoPos).addScaledVector(dir, idealDist);
+        _camTargetTo.copy(holoPos);
+        // Save current state
+        _camFocusFrom.copy(camera.position);
+        _camTargetFrom.copy(controls.target);
+        camFocusing = true;
+        camFocusT   = 0;
+    }
+    // 9 — increase orbit speed, 8 — decrease orbit speed
+    if (e.code === 'Digit9' || e.code === 'Digit8') {
+        const step = e.code === 'Digit9' ? 0.25 : -0.25;
+        uiData.orbitSpeed = Math.max(-3.0, Math.min(3.0,
+            parseFloat((uiData.orbitSpeed + step).toFixed(2))
+        ));
+        const s = document.getElementById('input-orbitSpeed');
+        const l = document.getElementById('val-orbitSpeed');
+        if (s) s.value = uiData.orbitSpeed;
+        if (l) l.innerText = uiData.orbitSpeed.toFixed(2);
+    }
+    // Arrow Up/Down — emoji prob +/- 5% (works even when UI is hidden)
+    if (e.code === 'ArrowUp' || e.code === 'ArrowDown') {
+        e.preventDefault();
+        const step = e.code === 'ArrowUp' ? 5 : -5;
+        const raw  = Math.min(100, Math.max(0, Math.round(uiData.eProb * 100) + step));
+        uiData.eProb = raw / 100;
+        const sl = document.getElementById('input-eProb');
+        const vl = document.getElementById('val-eProb');
+        if (sl) sl.value = raw;
+        if (vl) vl.innerText = raw;
+    }
+    // T — activate tornado storm, save + boost emoji prob
+    if (e.code === 'KeyT') {
+        if (!tornadoActive) {
+            tornadoEProbSaved = uiData.eProb; // save current value once
+            uiData.eProb = Math.min(1.0, uiData.eProb + 0.55); // boost +55%
+            const sl = document.getElementById('input-eProb');
+            const vl = document.getElementById('val-eProb');
+            if (sl) sl.value = Math.round(uiData.eProb * 100);
+            if (vl) vl.innerText = Math.round(uiData.eProb * 100);
+        }
+        tornadoActive = true;
+    }
+    // E — detonate explosion burst
+    if (e.code === 'KeyE') triggerExplosion();
+});
+
+window.addEventListener('keyup', (e) => {
+    if (e.code === 'KeyT') {
+        tornadoActive = false;
+        // Restore eProb to pre-storm value
+        if (tornadoEProbSaved !== null) {
+            uiData.eProb = tornadoEProbSaved;
+            const sl = document.getElementById('input-eProb');
+            const vl = document.getElementById('val-eProb');
+            if (sl) sl.value = Math.round(uiData.eProb * 100);
+            if (vl) vl.innerText = Math.round(uiData.eProb * 100);
+            tornadoEProbSaved = null;
+        }
+    }
+});
+
+const bind = (id, key, scale) => {
+    const el = document.getElementById('input-' + id);
+    if (!el) return;
+    el.oninput = (ev) => {
+        let val = parseFloat(ev.target.value);
+        if (scale) val *= scale;
+        uiData[key] = val;
+        document.getElementById('val-' + id).innerText = ev.target.value;
+    };
+};
+
+bind('hRad','hRad'); bind('hSens','hSens');
+bind('imgScale','imgScale'); bind('imgY','imgY'); bind('tiltAmt','tiltAmt');
+bind('tileCount','tileCount'); bind('glitchSpd','glitchSpd');
+bind('rgbSens','rgbSens'); bind('rgbMax','rgbMax'); bind('imgGlow','imgGlow');
+bind('swapSens','swapSens'); bind('swapCool','swapCool'); bind('transSpd','transSpd');
+bind('glitchRows','glitchRows'); bind('smearAmt','smearAmt'); bind('jumpAmt','jumpAmt');
+bind('oScale','oScale'); bind('oSens','oSens'); bind('oMax','oMax');
+bind('bScale','bScale'); bind('bSens','bSens'); bind('bMax','bMax');
+bind('orbitSpeed','orbitSpeed');
+bind('cDens','cDens',0.01); bind('pSens','pSens'); bind('eProb','eProb',0.01);
+bind('pSize','pSize'); bind('pRand','pRand');
+bind('aSpeed','aSpeed'); bind('jitter','jitter');
+bind('tDelay','tDelay'); bind('tSpeed','tSpeed');
+bind('aThresh','aThresh'); bind('tLen','tLen');
+
+// ═══════════════════════════════════════════════════════════════
+//  SCENE BASICS
+// ═══════════════════════════════════════════════════════════════
+scene.add(new THREE.GridHelper(30, 30, 0x222222, 0x111111));
+
+const colors = [0x8A2BE2, 0x00ffff, 0xffaa00, 0x00ff00];
+function getWeightedColor() {
+    const r = Math.random();
+    if (r < 0.4) return colors[0]; if (r < 0.6) return colors[1];
+    if (r < 0.8) return colors[2]; return colors[3];
+}
+function createEmojiTexture(emoji) {
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d'); x.font = '80px Arial';
+    x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(emoji, 64, 64);
+    return new THREE.CanvasTexture(c);
+}
+
+const EMOJI_PRESETS = {
+    pop:   ['🎉','💖','🔥','🥰','😎'],
+    rock:  ['🤘','💀','🎸','🔊','🤯'],
+    dark:  ['💀','🕷️','🖤','👁️','🌑'],
+    chill: ['🐱','✨','🦄','🎵','👋'],
+    hype:  ['💰','👑','🔱','💎','🚀']
+};
+let emojiTextures = EMOJI_PRESETS.pop.map(createEmojiTexture);
+
+document.getElementById('emojiPreset').onchange = (e) => {
+    emojiTextures = EMOJI_PRESETS[e.target.value].map(createEmojiTexture);
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  CYAN HEARTBEAT RING  (11kHz–22kHz → bins 511–1023)
+// ═══════════════════════════════════════════════════════════════
+const HI_BIN_START = 511, HI_BIN_END = 1023;
+const hbMat = new THREE.MeshBasicMaterial({
+    color: 0x00ffff, side: THREE.DoubleSide, transparent: true, opacity: 0.8
+});
+const heartbeatRing = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.25, 64), hbMat);
+heartbeatRing.rotation.x = -Math.PI / 2;
+scene.add(heartbeatRing);
+
+// ═══════════════════════════════════════════════════════════════
+//  HOLOGRAM SHADER — dual texture + row glitch transition
+// ═══════════════════════════════════════════════════════════════
+const holoVert = `
+    varying vec2 vUv;
+    void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+`;
+
+const holoFrag = `
+    uniform sampler2D uTexA;       // current image
+    uniform sampler2D uTexB;       // incoming image
+    uniform bool      uHasTexA;
+    uniform bool      uHasTexB;
+    uniform float     uTime;
+    uniform float     uTileCount;
+    uniform float     uGlitchSpd;
+    uniform float     uRGBOffset;
+    uniform float     uBrightness;
+    uniform float     uMusicEnergy;
+    // Transition
+    uniform float     uTransition;   // 0=A clean, 0.5=max chaos, 1=B clean
+    uniform float     uGlitchSeed;   // randomized per transition
+    uniform float     uGlitchRows;   // horizontal strip count
+    uniform float     uSmearAmt;     // max horizontal smear distance (UV space)
+    uniform float     uJumpAmt;      // max vertical jump distance (UV space)
+    varying vec2      vUv;
+
+    float rand(vec2 co) {
+        return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+    }
+
+    void main() {
+        if (!uHasTexA && !uHasTexB) { discard; }
+
+        // ── Glitch transition row system ───────────────────────────
+        // sin curve: peaks at uTransition=0.5, zero at 0 and 1
+        float glitchAmt = sin(uTransition * 3.14159265);
+
+        float rowF    = floor(vUv.y * uGlitchRows);
+        float rowRand = rand(vec2(rowF, uGlitchSeed));          // stable per row+seed
+
+        // Horizontal smear — all rows, each at unique distance and direction
+        float hDir   = sign(rand(vec2(rowF, uGlitchSeed + 17.3)) - 0.5);
+        float hMag   = rand(vec2(rowF, uGlitchSeed + 5.1));
+        float hOff   = hDir * hMag * uSmearAmt * glitchAmt;    // peaks at mid-transition
+
+        // Vertical jumpers — ~20% of rows snap up/down
+        float isJumper = step(0.80, rowRand);
+        float jumpDir  = sign(rand(vec2(rowF, uGlitchSeed + 33.7)) - 0.5);
+        float jumpMag  = rand(vec2(rowF, uGlitchSeed + 9.2));
+        float vOff     = isJumper * jumpDir * jumpMag * uJumpAmt * glitchAmt;
+
+        // Apply offsets to UV — clamp so we don't sample outside texture
+        // Same distorted UV used for both textures = smear "drags" both images together
+        vec2 uvGlitch = vec2(
+            clamp(vUv.x + hOff, 0.0, 1.0),
+            clamp(vUv.y + vOff, 0.0, 1.0)
+        );
+
+        // ── Tiling hologram alpha (music-reactive) ─────────────────
+        float liveSpeed = uGlitchSpd * (0.3 + uMusicEnergy * 2.5);
+        vec2  tileCoord = floor(vUv * uTileCount);
+        float timeSlot  = floor(uTime * liveSpeed);
+        float cellRand  = rand(tileCoord + vec2(timeSlot * 0.137, timeSlot * 0.251));
+        float alphaFloor = 0.4 + uMusicEnergy * 0.5;
+        float tileAlpha  = alphaFloor + cellRand * (1.0 - alphaFloor);
+
+        // ── RGB chromatic offset (12kHz+ driven) ──────────────────
+        float off = uRGBOffset;
+        // Sample both textures at glitched UV
+        vec4 aR = texture2D(uTexA, clamp(uvGlitch + vec2( off, 0.0), 0.0, 1.0));
+        vec4 aG = texture2D(uTexA, uvGlitch);
+        vec4 aB = texture2D(uTexA, clamp(uvGlitch + vec2(-off, 0.0), 0.0, 1.0));
+        vec4 colA = vec4(aR.r, aG.g, aB.b, aG.a);
+
+        vec4 bR = texture2D(uTexB, clamp(uvGlitch + vec2( off, 0.0), 0.0, 1.0));
+        vec4 bG = texture2D(uTexB, uvGlitch);
+        vec4 bB = texture2D(uTexB, clamp(uvGlitch + vec2(-off, 0.0), 0.0, 1.0));
+        vec4 colB = vec4(bR.r, bG.g, bB.b, bG.a);
+
+        // Blend A→B across transition. If only one texture loaded, use that one.
+        vec4 col;
+        if (!uHasTexA) {
+            col = colB;
+        } else if (!uHasTexB) {
+            col = colA;
+        } else {
+            col = mix(colA, colB, uTransition);
+        }
+
+        gl_FragColor = vec4(col.rgb * uBrightness, col.a * tileAlpha);
+    }
+`;
+
+const holoUniforms = {
+    uTexA:        { value: null },
+    uTexB:        { value: null },
+    uHasTexA:     { value: false },
+    uHasTexB:     { value: false },
+    uTime:        { value: 0.0 },
+    uTileCount:   { value: 8.0 },
+    uGlitchSpd:   { value: 8.0 },
+    uRGBOffset:   { value: 0.0 },
+    uBrightness:  { value: 0.5 },
+    uMusicEnergy: { value: 0.0 },
+    uTransition:  { value: 0.0 },
+    uGlitchSeed:  { value: 0.0 },
+    uGlitchRows:  { value: 40.0 },
+    uSmearAmt:    { value: 0.5 },
+    uJumpAmt:     { value: 0.12 }
+};
+
+const holoMat = new THREE.ShaderMaterial({
+    vertexShader: holoVert, fragmentShader: holoFrag,
+    uniforms: holoUniforms, transparent: true, depthWrite: false, side: THREE.DoubleSide
+});
+
+const holoGroup = new THREE.Group();
+const holoMesh  = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), holoMat);
+holoGroup.add(holoMesh);
+scene.add(holoGroup);
+
+// ═══════════════════════════════════════════════════════════════
+//  4-IMAGE SLOT SYSTEM
+// ═══════════════════════════════════════════════════════════════
+const loadedTextures  = [null, null, null, null];
+const slotAspects     = [1.0,  1.0,  1.0,  1.0];  // w/h per slot, default square
+let   currentSlot     = 0;
+let   nextSlot        = 1;
+
+function updateSlotIndicators() {
+    for (let i = 0; i < 4; i++) {
+        const dot = document.getElementById('dot-' + i);
+        dot.className = 'slot-indicator';
+        if (loadedTextures[i]) dot.classList.add('loaded-dot');
+        if (i === currentSlot && loadedTextures[i]) dot.classList.add('active');
+    }
+}
+
+function loadSlot(idx) {
+    document.getElementById('imgInput-' + idx).click();
+}
+
+for (let i = 0; i < 4; i++) {
+    document.getElementById('slot-' + i).onclick = () => loadSlot(i);
+    document.getElementById('imgInput-' + i).onchange = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        new THREE.TextureLoader().load(URL.createObjectURL(file), (tex) => {
+            loadedTextures[i] = tex;
+            // Store this slot's true aspect ratio (width / height)
+            slotAspects[i] = tex.image.width / tex.image.height;
+            document.getElementById('slot-' + i).classList.add('loaded');
+            document.getElementById('slot-' + i).innerText = '✅ SLOT ' + (i + 1);
+            // First loaded image goes directly into texA and sets aspect
+            const loadedCount = loadedTextures.filter(Boolean).length;
+            if (loadedCount === 1) {
+                currentSlot = i;
+                holoUniforms.uTexA.value    = tex;
+                holoUniforms.uHasTexA.value = true;
+                currentAspect = slotAspects[i];
+            }
+            updateSlotIndicators();
+        });
+    };
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TRANSITION ENGINE
+// ═══════════════════════════════════════════════════════════════
+let isTransitioning   = false;
+let transitionStart   = 0;
+let lastSwapTime      = 0;
+let smoothedEnergy    = 0;
+let prevSmoothed      = 0;
+let currentAspect     = 1.0;  // live aspect ratio of displayed image
+
+function getNextLoadedSlot(from) {
+    // Find next slot (wrapping) that has a texture loaded, skipping current
+    for (let i = 1; i <= 4; i++) {
+        const idx = (from + i) % 4;
+        if (loadedTextures[idx]) return idx;
+    }
+    return from; // only one slot loaded — stay
+}
+
+function triggerTransition() {
+    if (isTransitioning) return;
+    const loaded = loadedTextures.filter(Boolean).length;
+    if (loaded < 2) return;  // need at least 2 images to transition
+
+    nextSlot = getNextLoadedSlot(currentSlot);
+    if (nextSlot === currentSlot) return;
+
+    // Arm texB with the incoming image
+    holoUniforms.uTexB.value    = loadedTextures[nextSlot];
+    holoUniforms.uHasTexB.value = true;
+    // New random seed = different rows jump every time
+    holoUniforms.uGlitchSeed.value = Math.random() * 999.0;
+
+    isTransitioning = true;
+    transitionStart = performance.now() * 0.001;
+    lastSwapTime    = transitionStart;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  BARS
+// ═══════════════════════════════════════════════════════════════
+// Red (#cc2200) → Orange (#ffaa00) — gradient driven by intensity per bar
+const BAR_COLOR_LOW  = new THREE.Color(0xcc2200); // deep red at rest
+const BAR_COLOR_HIGH = new THREE.Color(0xffdd00); // bright yellow-orange at peak
+// Purple (#6600cc) → Cyan (#00ffff) — gradient for blue bass bars
+const BLUE_COLOR_LOW  = new THREE.Color(0x6600cc);
+const BLUE_COLOR_HIGH = new THREE.Color(0x00ffff);
+const _barCol = new THREE.Color();
+
+const TREBLE_BIN_START = 186, TREBLE_BIN_END = 557;
+const orangeBars = [];
+for (let i = 0; i < 18; i++) {
+    const bar = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 0.8),
+        new THREE.MeshBasicMaterial({ color: 0xcc2200, side: THREE.DoubleSide }));
+    bar.geometry.translate(0, 0.4, 0); bar.geometry.rotateX(-Math.PI / 2);
+    stage.add(bar);
+    const t = i / 17;
+    const bin = Math.floor(TREBLE_BIN_START * Math.pow(TREBLE_BIN_END / TREBLE_BIN_START, t));
+    orangeBars.push({ mesh: bar, angle: (i / 18) * Math.PI * 2, intensity: 0, bin });
+}
+
+const BASS_BIN_START = 1, BASS_BIN_END = 14;
+const blueBars = [];
+for (let i = 0; i < 36; i++) {
+    const bar = new THREE.Mesh(new THREE.PlaneGeometry(0.8, 1.0),
+        new THREE.MeshBasicMaterial({ color: 0x6600cc, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide }));
+    bar.geometry.translate(0, 0.5, 0); bar.geometry.rotateX(-Math.PI / 2);
+    stage.add(bar);
+    const bin = Math.floor(BASS_BIN_START + (i / 36) * (BASS_BIN_END - BASS_BIN_START));
+    blueBars.push({ mesh: bar, angle: (i / 36) * Math.PI * 2, current: 0.0, bin });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  AMBIENT BLOBS
+// ═══════════════════════════════════════════════════════════════
+const blobs = [];
+for (let i = 0; i < 300; i++) {
+    const roll = Math.random();
+    // Three tiers — assigned once at birth, never changed
+    let opacity, colorScale;
+    if (roll < 0.30) {
+        // DIM — background dust, barely visible
+        opacity     = 0.15 + Math.random() * 0.15;  // 0.15–0.30
+        colorScale  = 0.6;
+    } else if (roll < 0.80) {
+        // MID — visible floaters, soft presence
+        opacity     = 0.5 + Math.random() * 0.25;   // 0.50–0.75
+        colorScale  = 1.4;
+    } else {
+        // HOT — overdriven color, triggers bloom halo
+        opacity     = 0.9 + Math.random() * 0.1;    // 0.90–1.00
+        colorScale  = 2.6 + Math.random() * 0.6;    // 2.6–3.2 — blows out bloom threshold
+    }
+    const baseColor = new THREE.Color(getWeightedColor());
+    baseColor.multiplyScalar(colorScale);
+    const b = new THREE.Mesh(
+        new THREE.CircleGeometry(0.06, 6),
+        new THREE.MeshBasicMaterial({
+            color: baseColor, transparent: true,
+            opacity: opacity, depthWrite: false
+        })
+    );
+    b.renderOrder = 1; // always below trail segments (2) and emojis (3)
+    b.position.set((Math.random()-.5)*60, Math.random()*30, (Math.random()-.5)*60);
+    b.userData = {
+        vel: new THREE.Vector3(
+            (Math.random()-.5)*.1,
+            (Math.random()-.5)*.1,
+            (Math.random()-.5)*.1
+        )
+    };
+    scene.add(b); blobs.push(b);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TRAIL PARTICLES
+// ═══════════════════════════════════════════════════════════════
+const trails = [];
+
+function spawnSquare() {
+    // Always spawns a square trail — never replaced by emoji
+    const group   = new THREE.Group();
+    const pColor  = getWeightedColor();
+    const randMult = 1.0 + (Math.random() * 2.0 - 1.0) * uiData.pRand;
+    const sz       = Math.max(0.05, uiData.pSize * randMult);
+    const szH      = sz * (0.56 / 0.32);
+    for (let i = 0; i < uiData.tLen; i++) {
+        const seg = new THREE.Mesh(new THREE.PlaneGeometry(sz, szH),
+            new THREE.MeshBasicMaterial({
+                color: pColor, transparent: true, opacity: 0,
+                side: THREE.DoubleSide, depthWrite: false }));
+        seg.renderOrder = 2; // always above blobs
+        seg.position.y = -(i * 0.65);
+        group.add(seg);
+    }
+    const angle = Math.random()*Math.PI*2, dist = 2+Math.random()*4;
+    group.position.set(Math.cos(angle)*dist, 0.1, Math.sin(angle)*dist);
+    group.userData = {
+        v: 0.08+Math.random()*0.07,
+        killHeight: uiData.aThresh+(Math.random()*4),
+        birthTime: performance.now()*0.001,
+        lenAtBirth: uiData.tLen,
+        tornadoRadiusBias: (Math.random() - 0.5) * 1.6,  // ±0.8 — unique funnel thickness per particle
+        tornadoLerpRate:    0.04 + Math.random() * 0.08   // 0.04–0.12 — each arrives at different speed
+    };
+    stage.add(group); trails.push(group);
+}
+
+function spawnEmoji() {
+    // Spawns an emoji sprite — independent of square spawn
+    const group = new THREE.Group();
+    const randMult = 1.0 + (Math.random() * 2.0 - 1.0) * uiData.pRand;
+    const sz    = Math.max(0.05, uiData.pSize * randMult);
+    const sp    = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: emojiTextures[Math.floor(Math.random() * emojiTextures.length)],
+        transparent: true, depthWrite: false }));
+    sp.renderOrder = 3; // above squares and blobs
+    const es = (sz / 0.32) * 0.8;
+    sp.scale.set(es, es, 1);
+    group.add(sp);
+    const angle = Math.random()*Math.PI*2, dist = 2+Math.random()*4;
+    group.position.set(Math.cos(angle)*dist, 0.1, Math.sin(angle)*dist);
+    group.userData = {
+        v: 0.08+Math.random()*0.07,
+        killHeight: uiData.aThresh+(Math.random()*4),
+        birthTime: performance.now()*0.001,
+        lenAtBirth: 1,
+        tornadoRadiusBias: (Math.random() - 0.5) * 1.6,
+        tornadoLerpRate:    0.04 + Math.random() * 0.08
+    };
+    stage.add(group); trails.push(group);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  AUDIO
+// ═══════════════════════════════════════════════════════════════
+let analyser, dataArray, globalAudio, audioCtxGlobal;
+let songDuration = 0;
+const RGB_BIN_START = 557, RGB_BIN_END = 900;
+
+function initAudio(audio) {
+    if (!audioCtxGlobal)
+        audioCtxGlobal = new (window.AudioContext || window.webkitAudioContext)();
+    if (globalAudio) { globalAudio.pause(); globalAudio.currentTime = 0; }
+    globalAudio = audio;
+    const source = audioCtxGlobal.createMediaElementSource(audio);
+    analyser = audioCtxGlobal.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.8;
+    source.connect(analyser);
+    analyser.connect(audioCtxGlobal.destination);
+    dataArray = new Uint8Array(analyser.frequencyBinCount);
+    audio.addEventListener('loadedmetadata', () => {
+        songDuration = audio.duration;
+        console.log('Song duration:', songDuration.toFixed(1), 's → swap every',
+            (songDuration / 4).toFixed(1), 's (fallback)');
+    });
+    audio.play();
+    lastSwapTime = performance.now() * 0.001;
+}
+
+document.getElementById('start').onclick = function () {
+    const audio = new Audio('https://raw.githubusercontent.com/3dcinetv/mp3swap/main/MCA-Soda%20Pop%20Streamer%20(Stellar%20Stage).mp3');
+    audio.crossOrigin = 'anonymous';
+    initAudio(audio);
+    this.style.display = 'none';
+};
+
+document.getElementById('loadMp3Btn').onclick = () => document.getElementById('mp3FileInput').click();
+document.getElementById('mp3FileInput').onchange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    initAudio(new Audio(URL.createObjectURL(file)));
+    document.getElementById('start').style.display = 'none';
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  MAIN LOOP
+// ═══════════════════════════════════════════════════════════════
+const _camDir   = new THREE.Vector3();
+const FPS_CAP   = 30;
+const FRAME_MIN = 1000 / FPS_CAP;   // 33.33ms minimum between renders
+let   lastFrame = 0;
+
+function animate(timestamp) {
+    requestAnimationFrame(animate);
+
+    // ── 30fps CAP — skip render if frame arrived too early ───────────────
+    const elapsed = timestamp - lastFrame;
+    if (elapsed < FRAME_MIN) return;
+    lastFrame = timestamp - (elapsed % FRAME_MIN); // stay phase-aligned, no drift
+
+    const time = performance.now() * 0.001;
+
+    // ── HOLO UNIFORMS (always) ────────────────────────────────────────────
+    holoUniforms.uTime.value       = time;
+    holoUniforms.uTileCount.value  = uiData.tileCount;
+    holoUniforms.uGlitchSpd.value  = uiData.glitchSpd;
+    holoUniforms.uBrightness.value = uiData.imgGlow;
+    holoUniforms.uGlitchRows.value = uiData.glitchRows;
+    holoUniforms.uSmearAmt.value   = uiData.smearAmt;
+    holoUniforms.uJumpAmt.value    = uiData.jumpAmt;
+
+    // ── TRANSITION ANIMATION ──────────────────────────────────────────────
+    if (isTransitioning) {
+        const elapsed  = time - transitionStart;
+        const progress = Math.min(1.0, elapsed * uiData.transSpd);
+        holoUniforms.uTransition.value = progress;
+
+        if (progress >= 1.0) {
+            // Commit: B becomes new A, clear B
+            holoUniforms.uTexA.value    = loadedTextures[nextSlot];
+            holoUniforms.uHasTexA.value = true;
+            holoUniforms.uHasTexB.value = false;
+            holoUniforms.uTransition.value = 0.0;
+            currentSlot    = nextSlot;
+            currentAspect  = slotAspects[nextSlot];  // adopt incoming image's ratio
+            isTransitioning = false;
+            updateSlotIndicators();
+        }
+    }
+
+    // ── HOLOGRAM BILLBOARD ────────────────────────────────────────────────
+    holoGroup.position.set(0, uiData.imgY, 0);
+    // X = scale × aspect ratio, Y = scale — preserves original image proportions
+    holoMesh.scale.set(uiData.imgScale * currentAspect, uiData.imgScale, 1);
+    _camDir.subVectors(camera.position, holoGroup.position);
+    holoGroup.rotation.y = Math.atan2(_camDir.x, _camDir.z);
+    const hDist = Math.sqrt(_camDir.x * _camDir.x + _camDir.z * _camDir.z);
+    holoGroup.rotation.x = -Math.atan2(_camDir.y, hDist) * uiData.tiltAmt;
+
+    if (analyser) {
+        analyser.getByteFrequencyData(dataArray);
+
+        // ── CYAN RING (11kHz–22kHz) ───────────────────────────────────────
+        let hiSum = 0;
+        for (let b = HI_BIN_START; b <= HI_BIN_END; b++) hiSum += dataArray[b];
+        const hiAvg = (hiSum / (HI_BIN_END - HI_BIN_START + 1)) / 255;
+        heartbeatRing.scale.set(
+            uiData.hRad * (1 + hiAvg * uiData.hSens),
+            uiData.hRad * (1 + hiAvg * uiData.hSens), 1);
+        hbMat.opacity = 0.4 + hiAvg * 0.6;
+        holoUniforms.uMusicEnergy.value = hiAvg;
+
+        // ── RGB OFFSET (12kHz+) ───────────────────────────────────────────
+        let rgbSum = 0;
+        for (let b = RGB_BIN_START; b <= RGB_BIN_END; b++) rgbSum += dataArray[b];
+        const rgbE = (rgbSum / (RGB_BIN_END - RGB_BIN_START + 1)) / 255;
+        holoUniforms.uRGBOffset.value = Math.min(1.0, rgbE * uiData.rgbSens) * uiData.rgbMax;
+
+        // ── HYBRID IMAGE SWAP LOGIC ───────────────────────────────────────
+        if (!isTransitioning && loadedTextures.filter(Boolean).length >= 2) {
+            // Overall energy (broadband, bins 2–200)
+            let eSum = 0;
+            for (let b = 2; b <= 200; b++) eSum += dataArray[b];
+            const curEnergy = eSum / (199 * 255);
+            smoothedEnergy += (curEnergy - smoothedEnergy) * 0.08;
+            const energyDelta = curEnergy - prevSmoothed;
+            prevSmoothed = smoothedEnergy;
+
+            const timeSinceLast = time - lastSwapTime;
+
+            // ── ENERGY PEAK TRIGGER (default behavior)
+            const peakThreshold = 0.04 / uiData.swapSens;
+            const enoughTime    = timeSinceLast > uiData.swapCool;
+            if (energyDelta > peakThreshold && enoughTime) {
+                triggerTransition();
+            }
+
+            // ── TIME FALLBACK: if song duration is known, guarantee all 4 images show
+            if (songDuration > 0) {
+                const segment      = songDuration / 4;
+                const currentTime  = globalAudio.currentTime;
+                const expectedSlot = Math.min(3, Math.floor(currentTime / segment));
+                // Loaded slots in order
+                const loadedSlots  = [0,1,2,3].filter(i => loadedTextures[i]);
+                const expectedTex  = loadedSlots[Math.min(expectedSlot, loadedSlots.length - 1)];
+                // Force transition if we're behind schedule and cooldown has passed
+                if (expectedTex !== currentSlot && timeSinceLast > uiData.swapCool * 0.5) {
+                    nextSlot = expectedTex;
+                    holoUniforms.uTexB.value    = loadedTextures[nextSlot];
+                    holoUniforms.uHasTexB.value = true;
+                    holoUniforms.uGlitchSeed.value = Math.random() * 999.0;
+                    isTransitioning = true;
+                    transitionStart = time;
+                    lastSwapTime    = time;
+                }
+            }
+        }
+
+        // ── ORANGE BARS ───────────────────────────────────────────────────
+        // Width:  arc segment at current radius ÷ 18 bars × 80% fill — no lateral overlap
+        // Height: world units × (currentRadius / refRadius) — visually proportional at any radius
+        // Color:  deep red at rest → bright orange-yellow at peak (per bar, per frame)
+        const oRef    = 5.2;
+        const oSegW   = (2 * Math.PI * uiData.oScale / 18) * 0.82 / 1.4;
+        orangeBars.forEach(bar => {
+            const driven = Math.min(1.0, (dataArray[bar.bin]/255) * uiData.oSens);
+            bar.intensity = (driven > bar.intensity) ? driven : bar.intensity * 0.92;
+            const scaleZ  = (0.1 + bar.intensity * uiData.oMax) * (uiData.oScale / oRef);
+            bar.mesh.position.set(Math.cos(bar.angle)*uiData.oScale, 0.02, Math.sin(bar.angle)*uiData.oScale);
+            bar.mesh.scale.set(oSegW, 1, scaleZ);
+            bar.mesh.rotation.y = -bar.angle - Math.PI/2;
+            // Gradient: lerp red→orange by intensity
+            _barCol.copy(BAR_COLOR_LOW).lerp(BAR_COLOR_HIGH, bar.intensity);
+            bar.mesh.material.color.copy(_barCol);
+        });
+
+        // ── BLUE BARS ─────────────────────────────────────────────────────
+        // Peak-hold + fast decay (0.85) = hard kick snap-back, same pattern as orange
+        // Color: purple at rest → cyan at peak
+        const bRef  = 7.0;
+        const bSegW = (2 * Math.PI * uiData.bScale / 36) * 0.82 / 0.8;
+        blueBars.forEach(obj => {
+            const driven = Math.min(1.0, (dataArray[obj.bin]/255) * uiData.bSens);
+            // Peak-hold: instant attack, decay 0.85 (faster than orange 0.92 = snappier bass)
+            obj.current = (driven > obj.current) ? driven : obj.current * 0.85;
+            const scaleZ = (0.1 + obj.current * uiData.bMax) * (uiData.bScale / bRef);
+            obj.mesh.position.set(Math.cos(obj.angle)*uiData.bScale, 0.02, Math.sin(obj.angle)*uiData.bScale);
+            obj.mesh.scale.set(bSegW, 1, scaleZ);
+            obj.mesh.rotation.y = -obj.angle - Math.PI/2;
+            // Gradient: purple → cyan by intensity
+            _barCol.copy(BLUE_COLOR_LOW).lerp(BLUE_COLOR_HIGH, obj.current);
+            obj.mesh.material.color.copy(_barCol);
+        });
+
+        // ── PARTICLE SPAWN ────────────────────────────────────────────────
+        if (dataArray[10] > (255-(uiData.pSens-100)) && Math.random() < uiData.cDens) {
+            spawnSquare();                                    // always spawn squares
+            if (Math.random() < uiData.eProb) spawnEmoji(); // emoji is additive on top
+        }
+    }
+
+    // ── AMBIENT BLOBS ─────────────────────────────────────────────────────
+    const stormSpeedMult  = 1.0 + tornadoStrength * 4.0; // drift up to 5× faster in storm
+    const stormJitterMult = 1.0 + tornadoStrength * 3.0; // jitter up to 4× wilder
+    blobs.forEach(b => {
+        b.position.addScaledVector(b.userData.vel, uiData.aSpeed * stormSpeedMult);
+        b.position.x += Math.sin(time + b.position.y) * 0.01 * uiData.jitter * stormJitterMult;
+        if (Math.abs(b.position.x) > 35) b.position.x *= -0.98;
+        if (b.position.y > 30 || b.position.y < 0) b.position.y = b.position.y < 0 ? 30 : 0;
+        if (Math.abs(b.position.z) > 35) b.position.z *= -0.98;
+        b.lookAt(camera.position);
+    });
+
+    // ── TORNADO RAMP ─────────────────────────────────────────────────────
+    tornadoStrength += tornadoActive ? TORNADO_IN : -TORNADO_OUT;
+    tornadoStrength  = Math.max(0, Math.min(1, tornadoStrength));
+
+    // Visual feedback — title pulses red when storm is active
+    const title = document.getElementById('manifest-title');
+    if (title) {
+        if (tornadoStrength > 0.01) {
+            const r = Math.floor(138 + tornadoStrength * 117); // purple → red
+            const g = Math.floor(43  * (1 - tornadoStrength));
+            title.style.color       = `rgb(${r},${g},226)`;
+            title.style.borderColor = `rgb(${r},${g},226)`;
+            title.textContent = tornadoStrength > 0.5 ? '⚡ STORM ACTIVE ⚡' : 'V50-E MANIFEST';
+        } else {
+            title.style.color       = '#8A2BE2';
+            title.style.borderColor = '#8A2BE2';
+            title.textContent = 'V50-E MANIFEST';
+        }
+    }
+
+    // ── TRAILS ───────────────────────────────────────────────────────────
+    for (let i = trails.length-1; i >= 0; i--) {
+        const t = trails[i];
+        t.position.y += t.userData.v;
+
+        // ── TORNADO SPIRAL FORCE — CURL NOISE + DOMAIN WARP ─────────────
+        if (tornadoStrength > 0.001) {
+            const px = t.position.x;
+            const pz = t.position.z;
+            const altNorm = Math.max(0, t.position.y / Math.max(1.0, uiData.aThresh));
+
+            // ── DOMAIN WARP — fold coordinates back on themselves ──────────
+            // This makes the potential field crinkle — same coords visited at
+            // different times produce different curl directions
+            const warpScale = 0.55 * tornadoStrength;
+            const wx = px + warpScale * Math.sin(px * 0.7 + pz * 0.4 + time * 0.6);
+            const wz = pz + warpScale * Math.cos(px * 0.5 - pz * 0.8 + time * 0.4);
+
+            // ── CURL NOISE — analytical curl of scalar potential ψ(wx,wz,t) ─
+            // ψ = sum of sin layers at different frequencies + time drift
+            // curl_x =  ∂ψ/∂z  (derivative w.r.t. z)
+            // curl_z = -∂ψ/∂x  (negative derivative w.r.t. x)
+            // Divergence-free: particles cannot converge into lines by design
+            const f1=0.55, f2=1.1, f3=0.28, f4=1.7;
+            const t1=time*0.5, t2=time*0.31, t3=time*0.73, t4=time*0.19;
+
+            const curlX =
+                  f1 * Math.cos(f1*wz + t1) * 1.0
+                + f2 * Math.cos(f2*wz + t2) * 0.5
+                + f3 * Math.cos(f3*wz + wx*0.4 + t3) * 0.8
+                - f4 * Math.sin(f4*wx + t4) * 0.3;
+
+            const curlZ =
+                -(f1 * Math.cos(f1*wx + t1) * 1.0
+                + f2 * Math.cos(f2*wx + t2) * 0.5
+                + f3 * Math.cos(f3*wx + wz*0.4 + t3) * 0.8
+                - f4 * Math.sin(f4*wz + t4) * 0.3);
+
+            // ── FUNNEL SHAPE — altitude drives target radius ───────────────
+            // Per-particle bias breaks the synchronized ring snap
+            const minR     = 1.5;
+            const maxR     = uiData.bScale;
+            const targetR  = minR + altNorm * (maxR - minR) * tornadoStrength
+                             + t.userData.tornadoRadiusBias; // unique offset per particle
+            const radius   = Math.sqrt(px*px + pz*pz);
+            const radErr   = targetR - radius; // how far from funnel wall
+            const lerpRate = t.userData.tornadoLerpRate; // unique per particle
+            // Radial correction — gentle per-particle pull toward their personal funnel wall
+            const nx_dir   = radius > 0.01 ? px / radius : 0;
+            const nz_dir   = radius > 0.01 ? pz / radius : 0;
+
+            // ── COMBINE: curl swirl + funnel correction ────────────────────
+            const curlStrength = tornadoStrength * 0.12 * (0.5 + altNorm * 1.8);
+            t.position.x += curlX * curlStrength + nx_dir * radErr * lerpRate;
+            t.position.z += curlZ * curlStrength + nz_dir * radErr * lerpRate;
+
+            // Hard outer wall — never exceed bScale
+            const newR = Math.sqrt(t.position.x*t.position.x + t.position.z*t.position.z);
+            if (newR > maxR) {
+                t.position.x = (t.position.x / newR) * maxR;
+                t.position.z = (t.position.z / newR) * maxR;
+            }
+        }
+        const localTime = (performance.now()*0.001) - t.userData.birthTime;
+        // Billboard: square segments face camera when above floor
+        // Below floor they keep their natural orientation (rising planes look fine from below)
+        const camAboveFloor = camera.position.y > 0;
+        t.children.forEach((c, idx) => {
+            if (c.isSprite) {
+                c.material.opacity = t.position.y > t.userData.killHeight ? 0 : 1;
+            } else {
+                // Billboard — each segment faces camera independently
+                if (camAboveFloor) {
+                    // World position of this segment
+                    const segWorld = new THREE.Vector3();
+                    c.getWorldPosition(segWorld);
+                    c.lookAt(camera.position);
+                }
+                const swy = t.position.y + c.position.y;
+                const kA  = Math.max(0, Math.min(1, (t.userData.killHeight - swy) / 0.5));
+                if (idx === 0) {
+                    c.material.opacity = kA;
+                } else {
+                    const aA  = Math.max(0, Math.min(1, (localTime - uiData.tDelay - idx*0.15) * uiData.tSpeed));
+                    const tap = 1 - (idx / t.userData.lenAtBirth);
+                    c.material.opacity = aA * kA * tap;
+                }
+            }
+        });
+        if (t.position.y - (t.userData.lenAtBirth-1)*0.65 > t.userData.killHeight) {
+            stage.remove(t); trails.splice(i,1);
+        }
+    }
+
+    // ── CAMERA FOCUS (7) — ease-in-out lerp to framed position ──────────
+    if (camFocusing) {
+        camFocusT += (1/30) / FOCUS_DUR;
+        if (camFocusT >= 1.0) {
+            camFocusT   = 1.0;
+            camFocusing = false;
+        }
+        // If orbit is active, rotate the focus destination each frame too
+        // so the camera zooms in while continuing to orbit — no vibe break
+        if (uiData.orbitSpeed !== 0) {
+            const orbitDelta = uiData.orbitSpeed * 0.005;
+            const ox  = _camFocusTo.x - _camTargetTo.x;
+            const oz  = _camFocusTo.z - _camTargetTo.z;
+            const orbitR = Math.sqrt(ox*ox + oz*oz);
+            const orbitA = Math.atan2(ox, oz) + orbitDelta;
+            _camFocusTo.x = _camTargetTo.x + orbitR * Math.sin(orbitA);
+            _camFocusTo.z = _camTargetTo.z + orbitR * Math.cos(orbitA);
+        }
+        // Cubic ease-in-out S-curve
+        const t    = camFocusT;
+        const ease = t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t+2, 3)/2;
+        camera.position.lerpVectors(_camFocusFrom, _camFocusTo, ease);
+        controls.target.lerpVectors(_camTargetFrom, _camTargetTo, ease);
+        controls.update();
+    }
+
+    // ── AUTO ORBIT ────────────────────────────────────────────────────────
+    if (uiData.orbitSpeed !== 0) {
+        const delta  = uiData.orbitSpeed * 0.005;
+        const offset = camera.position.clone().sub(controls.target);
+        const radius = Math.sqrt(offset.x*offset.x + offset.z*offset.z);
+        const theta  = Math.atan2(offset.x, offset.z) + delta;
+        camera.position.set(
+            controls.target.x + radius * Math.sin(theta),
+            camera.position.y,
+            controls.target.z + radius * Math.cos(theta)
+        );
+        camera.lookAt(controls.target);
+    }
+
+    // ── EXPLOSION ─────────────────────────────────────────────────────────
+    if (exploding) {
+        explodeTime += 1 / 30;
+        const dur  = EXPLODE_DUR * (0.7 + explodeBoost * 0.3); // boost extends lifetime
+        const t01  = Math.min(1, explodeTime / dur);
+        const env  = Math.pow(1.0 - t01, 1.4) * explodeBoost;
+
+        // Flash core — white→orange, shrinks fast
+        const flashScale = 3.8 * Math.exp(-explodeTime * 4.5) * explodeBoost;
+        flashMesh.scale.setScalar(Math.max(0, flashScale));
+        flashMesh.material.color.setRGB(1.0, 0.5 + 0.5*(1-t01), 0.1*(1-t01));
+
+        // Shockwave ring
+        const shockScale = 0.1 + t01 * uiData.bScale * 1.6 * explodeBoost;
+        shockMesh.scale.set(shockScale, shockScale, shockScale);
+        shockMat.opacity = env * 0.65 * (1 - Math.pow(t01, 0.3));
+
+        // Burst particles — white at birth → orange mid → ember red → fade
+        burstParticles.forEach(p => {
+            // Move outward — decelerate naturally
+            const spd = p.userData.speed * (1/30) * Math.pow(1 - t01, 0.5) * explodeBoost;
+            p.position.addScaledVector(p.userData.dir, spd);
+            p.position.y -= 0.008 * t01 * (p.userData.isInner ? 0.5 : 1.2); // gravity, less on inner
+
+            // Color: white (0) → orange (0.4) → ember (0.8) → fade (1.0)
+            if (t01 < 0.4) {
+                _burstCol.copy(BURST_WHITE).lerp(BURST_ORANGE, t01 / 0.4);
+            } else {
+                _burstCol.copy(BURST_ORANGE).lerp(BURST_EMBER, (t01 - 0.4) / 0.6);
+            }
+            p.material.color.copy(_burstCol);
+
+            // Opacity: fast flash in, envelope out
+            const fadeIn = Math.min(1, explodeTime * 12);
+            p.material.opacity = fadeIn * env * (p.userData.isInner ? 1.0 : 0.75);
+            p.lookAt(camera.position);
+        });
+
+        // Chromatic aberration + bloom
+        const ca = Math.exp(-explodeTime * 3.2) * explodeBoost;
+        caPass.uniforms.uCAStrength.value = ca;
+        bloom.strength = 1.8 + ca * 4.0 * explodeBoost;
+
+        if (t01 >= 1.0) {
+            exploding = false;
+            lastExplodeEnd = performance.now() * 0.001; // start cooldown
+            flashMesh.visible = false;
+            flashMesh.scale.setScalar(1);
+            shockMat.opacity = 0;
+            burstParticles.forEach(p => {
+                p.material.opacity = 0;
+                p.position.set(0, 0.5, 0);
+            });
+            caPass.uniforms.uCAStrength.value = 0;
+            bloom.strength = 1.8;
+            explodeBoost = 1.0;
+        }
+    }
+
+    composer.render();
+}
+animate();
+</script>
+</body>
+</html>
